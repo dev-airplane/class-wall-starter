@@ -206,7 +206,7 @@ function makeMemo(memo) {
         await render();
       } catch (error) {
         console.error("AI 코멘트를 만들지 못했습니다.", error);
-        alert("AI 코멘트를 만들지 못했습니다. Vercel 환경 변수를 확인해 주세요.");
+        alert("AI 코멘트를 만들지 못했습니다: " + error.message);
       } finally {
         ai.disabled = false;
         ai.textContent = "AI 코멘트";
