@@ -1,0 +1,107 @@
+// ===============================================================
+// 데이터 구조
+// ===============================================================
+//
+// 컬렉션: memos
+// 문서 ID: Firestore가 자동으로 만드는 ID
+// 필드:
+//   - text: string (필수, 1~60자) - 메모 내용
+//   - createdAt: number (필수) - 작성 시각(밀리초)
+//   - uid: string (필수, 변경 불가) - 작성자의 Firebase Authentication UID
+// 하위 컬렉션: aiComments
+// 문서 ID: latest
+// 필드:
+//   - text: string (필수, 1~300자) - AI 코멘트 내용
+//   - createdAt: number (필수) - 코멘트 작성 시각(밀리초)
+//
+// ===============================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 로그인한 사용자만 요청할 수 있는지 확인합니다.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 교사 계정인지 확인합니다.
+    function isTeacher() {
+      return isSignedIn() &&
+        request.auth.uid == 'EvFFdchN9oa6C4ocjV5QX36IAFw1';
+    }
+
+    // 작성 시각이 현재 시각에서 너무 멀지 않은지 확인합니다.
+    function hasReasonableCreatedAt() {
+      return request.resource.data.createdAt is number &&
+        request.resource.data.createdAt >= request.time.toMillis() - 300000 &&
+        request.resource.data.createdAt <= request.time.toMillis() + 300000;
+    }
+
+    // 메모가 정해진 필드와 자료형을 지키는지 확인합니다.
+    function hasValidMemoData() {
+      return
+        request.resource.data.keys().hasOnly(['text', 'createdAt', 'uid']) &&
+        request.resource.data.keys().hasAll(['text', 'createdAt', 'uid']) &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() >= 1 &&
+        request.resource.data.text.size() <= 60 &&
+        hasReasonableCreatedAt() &&
+        request.resource.data.uid is string;
+    }
+
+    // 새 메모의 uid가 현재 로그인한 사용자와 같은지 확인합니다.
+    function isOwnNewMemo() {
+      return isSignedIn() &&
+        hasValidMemoData() &&
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    // 교사가 메모를 수정할 때 작성자와 작성 시각을 바꾸지 못하게 합니다.
+    function isValidTeacherUpdate() {
+      return hasValidMemoData() &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // 삭제하려는 메모의 작성자가 현재 로그인한 사용자와 같은지 확인합니다.
+    function isMemoOwner() {
+      return isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // AI 코멘트가 정해진 필드와 자료형을 지키는지 확인합니다.
+    function hasValidAiComment() {
+      return request.resource.data.keys().hasOnly(['text', 'createdAt']) &&
+        request.resource.data.keys().hasAll(['text', 'createdAt']) &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() >= 1 &&
+        request.resource.data.text.size() <= 300 &&
+        hasReasonableCreatedAt();
+    }
+
+    match /memos/{memoId} {
+      // 로그인한 사용자는 담벼락을 읽을 수 있습니다.
+      allow read: if isSignedIn();
+
+      // 로그인한 사용자는 자신의 uid로만 메모를 만들 수 있습니다.
+      allow create: if isOwnNewMemo();
+
+      // 교사는 모든 메모를 수정할 수 있습니다.
+      allow update: if isTeacher() && isValidTeacherUpdate();
+
+      // 교사는 모든 메모를, 학생은 자신의 메모만 지울 수 있습니다.
+      allow delete: if isTeacher() || isMemoOwner();
+    }
+
+    match /memos/{memoId}/aiComments/{commentId} {
+      // 로그인한 사용자는 AI 코멘트를 읽을 수 있습니다.
+      allow read: if isSignedIn();
+
+      // 교사만 AI 코멘트를 만들거나 바꿀 수 있습니다.
+      allow create, update: if isTeacher() && hasValidAiComment();
+
+      // 교사만 AI 코멘트를 지울 수 있습니다.
+      allow delete: if isTeacher();
+    }
+  }
+}
