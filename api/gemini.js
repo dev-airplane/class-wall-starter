@@ -87,7 +87,18 @@ export default async function handler(req, res) {
   );
 
   if (!geminiResponse.ok) {
-    return res.status(502).json({ error: "Gemini API가 코멘트를 만들지 못했습니다." });
+    let message = "응답 내용을 읽지 못했습니다.";
+    try {
+      const errorBody = await geminiResponse.json();
+      message = errorBody.error?.message || message;
+    } catch (error) {
+      console.error("Gemini API 오류 내용을 읽지 못했습니다.", error);
+    }
+
+    console.error("Gemini API 오류", geminiResponse.status, message);
+    return res.status(502).json({
+      error: "Gemini API 오류 (HTTP " + geminiResponse.status + ")입니다. Vercel Logs를 확인해 주세요."
+    });
   }
 
   const gemini = await geminiResponse.json();
