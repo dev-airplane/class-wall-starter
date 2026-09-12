@@ -16,7 +16,7 @@
 //   API 키는 코드에 적지 말고 Vercel 환경변수에 넣습니다. (process.env 로 꺼내 씁니다)
 // ===================================================
 
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-3.5-flash-lite";
 const TEACHER_UID = process.env.TEACHER_UID;
 
 export default async function handler(req, res) {
