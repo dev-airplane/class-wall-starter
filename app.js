@@ -1,3 +1,15 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
 // ===================================================
 // 우리 반 담벼락 - 시작점
 //
@@ -7,15 +19,19 @@
 // ===================================================
 
 
-// --- 메모 목록 ---
-// createdAt 은 메모를 쓴 시각(밀리초)입니다. 이 값으로 순서를 정합니다.
-let memos = [
-  { id: 1, text: "오늘 과학 시간에 한 실험이 재미있었다", createdAt: 1757030400000 },
-  { id: 2, text: "궁금한 점 - 물은 왜 100도에서 끓나요?", createdAt: 1757030500000 },
-  { id: 3, text: "모둠 친구들이 도와줘서 고마웠다", createdAt: 1757030600000 }
-];
+// Firebase 프로젝트에 연결합니다.
+const firebaseConfig = {
+  apiKey: "AIzaSyDCPUulvNlkiyeAUsxc0qRe7T_ZgEU00u8",
+  authDomain: "class-wall-starter-4080d.firebaseapp.com",
+  projectId: "class-wall-starter-4080d",
+  storageBucket: "class-wall-starter-4080d.firebasestorage.app",
+  messagingSenderId: "633427462070",
+  appId: "1:633427462070:web:d482a20e2152ea93fbe317"
+};
 
-let nextId = 4;  // 새 메모에 붙일 번호
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const memosRef = collection(db, "memos");
 
 
 // ===================================================
@@ -26,29 +42,32 @@ let nextId = 4;  // 새 메모에 붙일 번호
 // 메모를 읽어 옵니다.
 // 백엔드 1: 여기가 Firestore에서 가져오는 코드로 바뀝니다.
 //           순서는 orderBy("createdAt") 으로 맞춥니다.
-function loadMemos() {
-  return memos.slice().sort(function (a, b) {
-    return a.createdAt - b.createdAt;
+async function loadMemos() {
+  const memoQuery = query(memosRef, orderBy("createdAt"));
+  const snapshot = await getDocs(memoQuery);
+
+  return snapshot.docs.map(function (memo) {
+    return {
+      id: memo.id,
+      text: memo.data().text,
+      createdAt: memo.data().createdAt
+    };
   });
 }
 
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
-function addMemo(text) {
-  memos.push({
-    id: nextId,
+async function addMemo(text) {
+  await addDoc(memosRef, {
     text: text,
     createdAt: Date.now()
   });
-  nextId = nextId + 1;
 }
 
 // 메모를 지웁니다.
 // 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
-function deleteMemo(id) {
-  memos = memos.filter(function (memo) {
-    return memo.id !== id;
-  });
+async function deleteMemo(id) {
+  await deleteDoc(doc(db, "memos", id));
 }
 
 
@@ -56,11 +75,12 @@ function deleteMemo(id) {
 // 화면 그리기
 // ===================================================
 
-function render() {
+async function render() {
   const wall = document.getElementById("wall");
   wall.innerHTML = "";
 
-  loadMemos().forEach(function (memo) {
+  const memos = await loadMemos();
+  memos.forEach(function (memo) {
     wall.appendChild(makeMemo(memo));
   });
 }
@@ -72,10 +92,15 @@ function makeMemo(memo) {
 
   const del = document.createElement("button");
   del.textContent = "×";
-  del.onclick = function () {
-    deleteMemo(memo.id);
-    render();
-  };
+  del.addEventListener("click", async function () {
+    try {
+      await deleteMemo(memo.id);
+      await render();
+    } catch (error) {
+      console.error("메모를 지우지 못했습니다.", error);
+      alert("메모를 지우지 못했습니다. Firestore 설정을 확인해 주세요.");
+    }
+  });
   div.appendChild(del);
 
   const span = document.createElement("span");
@@ -93,20 +118,28 @@ function makeMemo(memo) {
 
 const input = document.getElementById("input");
 
-input.onkeydown = function (e) {
+input.addEventListener("keydown", async function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
 
     const text = input.value.trim();
     if (text === "") return;
 
-    addMemo(text);
-    input.value = "";
-    render();
+    try {
+      await addMemo(text);
+      input.value = "";
+      await render();
+    } catch (error) {
+      console.error("메모를 저장하지 못했습니다.", error);
+      alert("메모를 저장하지 못했습니다. Firestore 설정을 확인해 주세요.");
+    }
   }
-};
+});
 
 
 // 첫 화면 그리기
-render();
+render().catch(function (error) {
+  console.error("메모를 불러오지 못했습니다.", error);
+  alert("메모를 불러오지 못했습니다. Firestore 설정을 확인해 주세요.");
+});
 input.focus();
